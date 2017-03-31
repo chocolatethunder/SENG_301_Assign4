@@ -83,15 +83,24 @@ public class PaymentFacade {
  *  getSelectionButtonIndex()   - Returns the int value of the selection button that was pressed
  *  getProductNameSelected()    - Returns the name of the product selected by user
  *  getCostOfTheProduct()       - Returns the cost of the product selected by user 
+ *  isOutOfOrder()              - Returns whether the machine is out of order or not
  * 
  */
 public class CommunicationFacade {
 
     // Subscribe to events coming from HardwareFacade
+
+    // Local copy of the hardware facade
     private HardwareFacade hw;
-    private String productSelected;
+
+    // Variable used in the "API"
     private int fundsAvailable;
     private int selectionButtonPressed;
+    private string productName;
+    private int productCost;
+    private Boolean outOfOrderSignal;
+
+    // Local variables used to process logic
     private Dictionary<SelectionButton, int> selectionButtonToIndex;
 
     public CommunicationFacade(HardwareFacade hardwarefacade) {
@@ -106,6 +115,10 @@ public class CommunicationFacade {
             this.hw.SelectionButtons[i].Pressed += new EventHandler(selectButtonPressed);
             this.selectionButtonToIndex[this.hw.SelectionButtons[i]] = i;
         }
+
+        // Subscribe to machine status events
+        this.hw.OutOfOrderLight.Activated += new EventHandler(setMachineNotActive);
+        this.hw.OutOfOrderLight.Deactivated += new EventHandler(setMachineActive);
     }
 
     // INTERNAL PROCESSING METHODS
@@ -118,19 +131,44 @@ public class CommunicationFacade {
     // This method sets which selection button was pressed
     private void selectButtonPressed(object sender, EventArgs e) {
         this.selectionButtonPressed = this.selectionButtonToIndex[(SelectionButton)sender];
+        this.productName = this.hw.ProductKinds[this.selectionButtonPressed].Name;
+        this.productCost = this.hw.ProductKinds[this.selectionButtonPressed].Cost.Value;
+    }
+
+    // This method sets the machine status
+    private void setMachineActive(object sender, EventArgs e) {
+        this.outOfOrderSignal = false;
+    }
+    private void setMachineNotActive(object sender, EventArgs e) {
+        this.outOfOrderSignal = true;
     }
 
 
     // INTERFACING METHODS
 
-    // This method can be used to display the total amount of VALID funds user has inserted
+    // Send to the receiving hardware total amount of VALID funds user has inserted
     public int getFundsInserted() {
         return this.fundsAvailable;
     }
 
-    // This method can be used to display the total amount of VALID funds user has inserted
+    // Send to the receiving hardware the total amount of VALID funds user has inserted
     public int getSelectionButtonIndex() {
         return this.selectionButtonPressed;
+    }
+
+    // Send to the receiving hardware the name of the product
+    public string getProductNameSelected() {
+        return this.productName;
+    }
+
+    // Send to the receiving hardware the cost of the product
+    public int getCostOfTheProduct() {
+        return this.productCost;
+    }
+
+    // Send to the receiving hardware the whether the machine is out of order or not
+    public bool isOutOfOrder() {
+        return this.outOfOrderSignal;
     }
 
 }
