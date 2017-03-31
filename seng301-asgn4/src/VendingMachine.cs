@@ -49,6 +49,100 @@ public class VendingMachine {
 	    this.hardwareFacade = new HardwareFacade(coinKinds, selectionButtonCount, coinRackCapacity, productRackCapacity, receptacleCapacity);
 
 
-	    /* YOU CAN BUILD AND INSTALL THE HARDWARE HERE */
+        /* YOU CAN BUILD AND INSTALL THE HARDWARE HERE */
+
+        PaymentFacade payment       = new PaymentFacade(this.hardwareFacade);
+        CommunicationFacade comms   = new CommunicationFacade(this.hardwareFacade);
+        ProductFacade prod          = new ProductFacade(this.hardwareFacade);
+
     }
+}
+
+public class HardwareLogic {
+
+    // This class talks to the facades
+
+}
+
+public class PaymentFacade {
+
+    // Subscribe to events coming from HardwareFacade
+    private HardwareFacade hw;
+
+    public PaymentFacade(HardwareFacade hardwarefacade) {
+        this.hw = hardwarefacade;
+    }
+
+}
+
+
+
+/* Usage
+ * 
+ *  getFundsInserted()          - Int value of the valid money inserted by the user
+ *  getSelectionButtonIndex()   - Returns the int value of the selection button that was pressed
+ *  getProductNameSelected()    - Returns the name of the product selected by user
+ *  getCostOfTheProduct()       - Returns the cost of the product selected by user 
+ * 
+ */
+public class CommunicationFacade {
+
+    // Subscribe to events coming from HardwareFacade
+    private HardwareFacade hw;
+    private String productSelected;
+    private int fundsAvailable;
+    private int selectionButtonPressed;
+    private Dictionary<SelectionButton, int> selectionButtonToIndex;
+
+    public CommunicationFacade(HardwareFacade hardwarefacade) {
+        this.hw = hardwarefacade;
+       
+        // Subscribe to Accepted coin events
+        this.hw.CoinSlot.CoinAccepted += new EventHandler<CoinEventArgs>(updateCurrentBalance);
+
+        // Subscribe to all the selection buttons
+        this.selectionButtonToIndex = new Dictionary<SelectionButton, int>();
+        for (int i = 0; i < this.hw.SelectionButtons.Length; i++) {
+            this.hw.SelectionButtons[i].Pressed += new EventHandler(selectButtonPressed);
+            this.selectionButtonToIndex[this.hw.SelectionButtons[i]] = i;
+        }
+    }
+
+    // INTERNAL PROCESSING METHODS
+
+    // If the coin is updated return the amount of money that has been inserted.
+    private void updateCurrentBalance(object sender, CoinEventArgs e) {
+        this.fundsAvailable += e.Coin.Value.Value;
+    }
+
+    // This method sets which selection button was pressed
+    private void selectButtonPressed(object sender, EventArgs e) {
+        this.selectionButtonPressed = this.selectionButtonToIndex[(SelectionButton)sender];
+    }
+
+
+    // INTERFACING METHODS
+
+    // This method can be used to display the total amount of VALID funds user has inserted
+    public int getFundsInserted() {
+        return this.fundsAvailable;
+    }
+
+    // This method can be used to display the total amount of VALID funds user has inserted
+    public int getSelectionButtonIndex() {
+        return this.selectionButtonPressed;
+    }
+
+}
+
+
+public class ProductFacade {
+
+    // Subscribe to events coming from HardwareFacade
+    private HardwareFacade hw;
+
+    public ProductFacade(HardwareFacade hardwarefacade) {
+        this.hw = hardwarefacade;
+    }
+
 }
