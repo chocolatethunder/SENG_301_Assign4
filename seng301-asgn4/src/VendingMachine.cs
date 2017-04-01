@@ -13,7 +13,7 @@ using Frontend4.Hardware;
 public class VendingMachine {
 
     private HardwareFacade hardwareFacade;
-    private HardwareLogic hl;
+    private BusinessLogic hl;
 
     public HardwareFacade Hardware {
         get {
@@ -52,7 +52,7 @@ public class VendingMachine {
 	    this.hardwareFacade = new HardwareFacade(coinKinds, selectionButtonCount, coinRackCapacity, productRackCapacity, receptacleCapacity);
 
         /* YOU CAN BUILD AND INSTALL THE HARDWARE HERE */
-        this.hl = new HardwareLogic(this.hardwareFacade);
+        this.hl = new BusinessLogic(this.hardwareFacade);
 
     }
 
@@ -65,17 +65,16 @@ public class VendingMachine {
 }
 
 /*
- * 
- * 
+ * Basic Business logic. 
  */
-public class HardwareLogic {
+public class BusinessLogic {
 
     PaymentFacade payment;
     CommunicationFacade comms;
     ProductFacade prod;
 
     // This class talks to the facades
-    public HardwareLogic(HardwareFacade hardwareFacade) {
+    public BusinessLogic(HardwareFacade hardwareFacade) {
 
         // Create Facades
         this.payment = new PaymentFacade(hardwareFacade);
@@ -101,6 +100,7 @@ public class HardwareLogic {
     // Launch 
     public void initiate(object sender, SelectionEventArgs e) {
 
+        // If the machine is not being serviced or out of order
         if (!this.comms.isOutOfOrder()) {
             // if sufficient funds are inserted            
             if (this.payment.isValidTransaction()) {
@@ -123,6 +123,20 @@ public class HardwareLogic {
 
 /* Usage
  * 
+ * The idea behind this facade is for it to communicate financial data to potential hardware such as a MasterCard Paypass tap unit
+ * and provide it with relevent information such as how much change can be credited and then giving this hardware the power to check
+ * with it's banking system to see if the transaction has been successful and allow the machine to dispense the product that the user requested.
+ * 
+ * insertCoin(Coin coin)		- Inserts a coin into the CoinSlot
+ * loadCoins(int[])			    - (Technician Use) Loads the quantity of coins corresponding to each coin rack
+ * dispenseCoin(int index)		- Dispenses a coin from a given CoinRack[index]
+ * dispenseChange()			    - Dispenses change for a sucessful transaction
+ * dispenseAction()			    - Dispenses the change and returns any overhead credit that remains for the next transaction as a result of not having enough change to dispense
+ * storeCoins()				    - Tells the hardware to move the coins from the CoinRecepticle to the their respective CoinRacks or StorageBin
+ * coinsRemainInRack(int index) - Returns how many coins are available in a certain CoinRack
+ * getFundsAvailable()			- Returns how much funds or credit is available to purchase a product
+ * changeToBeDispensed()		- Returns how much change is ready to be dispenses on the event of a sucessful transaction
+ * isValidTransaction()		    - Returns whether the funds available are sufficient to buy the product
  * 
  */
 public class PaymentFacade {
@@ -280,6 +294,18 @@ public class PaymentFacade {
 
 /* Usage
  * 
+ * The idea behind this facade was to provide string and int data and error messages to a potential output display or light bar
+ * that can use a variety of these interfacing parameters to display a custom message to the user. It's secondar purpose is to take select button
+ * events from the vending machine base hardware and notify the other facades to update their local variables. 
+ * 
+ * selectButton(int index)		- Lets the user make a selection
+ * getFundsInserted()           - Returns the total current value of funds in the machine
+ * getSelectionButtonIndex()    - Returns the integer value of the selection button pressed
+ * getProductNameSelected()     - Returns the string value of the name of the product selected
+ * getCostOfTheProduct()        - Returns the int cost of the currently selected product
+ * isOutOfOrder()               - Returns a "signal" of whether the machine is out of order or not
+ * errorSignalLine()            - Returns a "signal" of whether an error was detected by any of the facades. Resets when a user enters a coin.
+ * errorMessage()               - Returns the string of the corresponding error message.
  * 
  */
 public class CommunicationFacade {
@@ -433,6 +459,15 @@ public class CommunicationFacade {
 
 /* Usage
  * 
+ * The idea behind this facade was to allow the configuration of the machine with different types of products as well as control over the 
+ * dispensing of products in each ProductRack. 
+ * 
+ * loadProducts(int[] products)             - (Technician Use) Loads the quantity of products corresponding to each ProductRack
+ * dispenseProduct(int index)               - Dispenses a product in a ProductRack[index]
+ * dispenseProductReady()                   - When a select button event takes place, it primes values for a certain product in a ProductRack to dispense when successful transaction occurs
+ * ConfigureHW(List<ProductKind> products)  - (Technician Use) Configures the ProductRacks with product names and their costs
+ * setNewName(int index, string name)       - (technician Use) Can be used to set a new name for the already loaded product
+ * setNewPrice(int index, Cents price)      - (technician Use) Can be used to set a new price for the already loaded product
  * 
  */
 public class ProductFacade {
@@ -515,11 +550,29 @@ public class ProductFacade {
         }
     }
 
+    // Set a new name for a product
+    public void setNewName(int index, string name) {
+        if (index >= 0 && index < this.hw.ProductKinds.Length) {
+            this.hw.ProductKinds[index].Name = name;
+        } else {
+            this.error(this, new ErrorEventArgs { message = "Error: Incorrect Product selected for configuration" });
+        }
+    }
+
+    // Set a new price for a product
+    public void setNewPrice(int index, Cents price) {
+        if (index >= 0 && index < this.hw.ProductKinds.Length) {
+            this.hw.ProductKinds[index].Cost = price;
+        } else {
+            this.error(this, new ErrorEventArgs { message = "Error: Incorrect Product selected for configuration" });
+        }
+    }
+
     // OUTBOUND
 
 }
 
-/********* EVEN DELEGATES **********/
+/********* EVENT DELEGATES **********/
 
 // Delegates for communication facade
 public class SelectionEventArgs : EventArgs {
