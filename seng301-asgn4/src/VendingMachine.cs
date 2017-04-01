@@ -13,6 +13,8 @@ using Frontend4.Hardware;
 public class VendingMachine {
 
     private HardwareFacade hardwareFacade;
+    private HardwareLogic hl;
+
     public HardwareFacade Hardware {
         get {
             return this.hardwareFacade;
@@ -50,16 +52,22 @@ public class VendingMachine {
 	    this.hardwareFacade = new HardwareFacade(coinKinds, selectionButtonCount, coinRackCapacity, productRackCapacity, receptacleCapacity);
 
         /* YOU CAN BUILD AND INSTALL THE HARDWARE HERE */
-        HardwareLogic hl = new HardwareLogic(this.hardwareFacade);
+        this.hl = new HardwareLogic(this.hardwareFacade);
 
     }
 
+    // Configure VendingMachine
     public void Configure (List<ProductKind> products) {
-        // send to configurehw
+        // send to hardware logic to be loaded via product facade
+        this.hl.configurehw(products);
     }
 
 }
 
+/*
+ * 
+ * 
+ */
 public class HardwareLogic {
 
     PaymentFacade payment;
@@ -84,21 +92,27 @@ public class HardwareLogic {
 
     }
 
+    // Configure the hardware
     public void configurehw (List<ProductKind> products) {
         // send to the product facade
+        this.prod.ConfigureHW(products);
     }
 
+    // Launch 
     public void initiate(object sender, SelectionEventArgs e) {
 
-        // if sufficient funds are inserted 
-            // dispense the product
-            // dispense the change
-            // store coins
-        if (this.payment.isValidTransaction()) {
-            this.prod.dispenseProductReady();
-            this.payment.dispenseChange();
-            this.payment.storeCoins();
-        }
+        if (!this.comms.isOutOfOrder()) {
+            // if sufficient funds are inserted            
+            if (this.payment.isValidTransaction()) {
+                // dispense the product               
+                this.prod.dispenseProductReady();
+                // dispense the change                
+                this.payment.dispenseChange();
+                // store coins
+                this.payment.storeCoins();
+            }
+
+        }        
 
     }
 
@@ -141,6 +155,12 @@ public class PaymentFacade {
 
         // Subscribe to Accepted coin events
         this.hw.CoinSlot.CoinAccepted += new EventHandler<CoinEventArgs>(updateCurrentBalance);
+
+        // Setup all the coins racks value to their index to be used in DispenseChange()
+        this.coinKindToCoinRackIndex = new Dictionary<int, int>();
+        for (int i = 0; i < this.hw.CoinRacks.Length; i++) {
+            this.coinKindToCoinRackIndex[this.hw.GetCoinKindForCoinRack(i).Value] = i;
+        }
 
     }
 
@@ -194,13 +214,19 @@ public class PaymentFacade {
 
     // Dispense change
     public void dispenseChange() {
+        this.fundsAvailable = this.dispenseAction();        
+    }
+
+    // This function dispenses the change and returns any overhead credit that 
+    // remains for the next transaction as a result of not having enough change to dispense
+    private int dispenseAction() {
 
         // This code is lifted from Tony's Assignment 4 in VendingMachineLogic.cs. Credit where credit is due.
         while (this.change > 0) {
             var coinRacksWithMoney = this.coinKindToCoinRackIndex.Where(ck => ck.Key <= this.change && this.hw.CoinRacks[ck.Value].Count > 0).OrderByDescending(ck => ck.Key);
 
             if (coinRacksWithMoney.Count() == 0) {
-                this.fundsAvailable = this.change;
+                return this.change;
             }
 
             var biggestCoinRackCoinKind = coinRacksWithMoney.First().Key;
@@ -213,7 +239,8 @@ public class PaymentFacade {
         // End of Tony's code
 
         // Reset funds available so that there is no credit available to next user by accident
-        this.fundsAvailable = 0;
+        return 0;
+
     }
 
     // This function moves the coins inserted by the user from the coin recepticle to 
@@ -300,6 +327,7 @@ public class CommunicationFacade {
         // Subscribe to machine status events
         this.hw.OutOfOrderLight.Activated += new EventHandler(setMachineNotActive);
         this.hw.OutOfOrderLight.Deactivated += new EventHandler(setMachineActive);
+
     }
 
     // Load all the other facades and subscribe to their appropriate events
@@ -474,6 +502,15 @@ public class ProductFacade {
             this.hw.ProductRacks[this.selectionButtonPressed].DispenseProduct();
         }
         catch (Exception e) {
+            this.error(this, new ErrorEventArgs { message = e.Message });
+        }
+    }
+
+    // Configure the machine with products
+    public void ConfigureHW(List<ProductKind> products) {
+        try {
+            this.hw.Configure(products);
+        } catch (Exception e) {
             this.error(this, new ErrorEventArgs { message = e.Message });
         }
     }
