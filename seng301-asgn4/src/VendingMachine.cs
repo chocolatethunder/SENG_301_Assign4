@@ -125,7 +125,7 @@ public class BusinessLogic {
  * 
  * The idea behind this facade is for it to communicate financial data to potential hardware such as a MasterCard Paypass tap unit
  * and provide it with relevent information such as how much change can be credited and then giving this hardware the power to check
- * with it's banking system to see if the transaction has been successful and allow the machine to dispense the product that the user requested.
+ * with it's banking system to see if the transaction has been successful and allow the machine to dispense the change.
  * 
  * insertCoin(Coin coin)		- Inserts a coin into the CoinSlot
  * loadCoins(int[])			    - (Technician Use) Loads the quantity of coins corresponding to each coin rack
@@ -295,7 +295,7 @@ public class PaymentFacade {
 /* Usage
  * 
  * The idea behind this facade was to provide string and int data and error messages to a potential output display or light bar
- * that can use a variety of these interfacing parameters to display a custom message to the user. It's secondar purpose is to take select button
+ * that can use a variety of these interfacing parameters to display a custom message to the user. It's secondary purpose is to take select button
  * events from the vending machine base hardware and notify the other facades to update their local variables. 
  * 
  * selectButton(int index)		- Lets the user make a selection
@@ -466,8 +466,8 @@ public class CommunicationFacade {
  * dispenseProduct(int index)               - Dispenses a product in a ProductRack[index]
  * dispenseProductReady()                   - When a select button event takes place, it primes values for a certain product in a ProductRack to dispense when successful transaction occurs
  * ConfigureHW(List<ProductKind> products)  - (Technician Use) Configures the ProductRacks with product names and their costs
- * setNewName(int index, string name)       - (technician Use) Can be used to set a new name for the already loaded product
- * setNewPrice(int index, Cents price)      - (technician Use) Can be used to set a new price for the already loaded product
+ * setNewName(int index, string name)       - (Technician Use) Can be used to set a new name for the already loaded product
+ * setNewPrice(int index, Cents price)      - (Technician Use) Can be used to set a new price for the already loaded product
  * 
  */
 public class ProductFacade {
