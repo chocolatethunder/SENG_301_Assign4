@@ -137,6 +137,7 @@ public class BusinessLogic {
  * getFundsAvailable()			- Returns how much funds or credit is available to purchase a product
  * changeToBeDispensed()		- Returns how much change is ready to be dispenses on the event of a sucessful transaction
  * isValidTransaction()		    - Returns whether the funds available are sufficient to buy the product
+ * unloadCoins()                - (Technician Use) Returns the A tuple of Sum in Coins in coinRacks and Sum of Coins in storage bin
  * 
  */
 public class PaymentFacade {
@@ -151,7 +152,7 @@ public class PaymentFacade {
     private int fundsAvailable = 0;
     private int change = 0;
     private int productCost = 0;
-    private int selectionButtonPressed;    
+    private int selectionButtonPressed;
 
     // Facade variables
     private CommunicationFacade comm;
@@ -164,7 +165,7 @@ public class PaymentFacade {
 
     public PaymentFacade(HardwareFacade hardwarefacade) {
         this.hw = hardwarefacade;
-       
+
         // SUBSCRIBE to events relevant to this Facade
 
         // Subscribe to Accepted coin events
@@ -193,13 +194,13 @@ public class PaymentFacade {
     private void updateCurrentBalance(object sender, CoinEventArgs e) {
         this.fundsAvailable += e.Coin.Value.Value;
     }
-    
+
     // This method retrieves info of the selection made
     private void selectButtonPressed(object sender, SelectionEventArgs e) {
         this.selectionButtonPressed = e.buttonPressIndex;
         this.productCost = e.productCost.Value;
         this.change = this.fundsAvailable - this.productCost;
-        
+
         // Check if the user can buy
         if (this.change < 0) {
             this.error(this, new ErrorEventArgs { message = "You do not have enough funds available to purchase a " + e.product.Name });
@@ -228,7 +229,7 @@ public class PaymentFacade {
 
     // Dispense change
     public void dispenseChange() {
-        this.fundsAvailable = this.dispenseAction();        
+        this.fundsAvailable = this.dispenseAction();
     }
 
     // This function dispenses the change and returns any overhead credit that 
@@ -286,6 +287,16 @@ public class PaymentFacade {
             return true;
         }
         return false;
+    }
+
+    // Get a tuple of the total number of coins in CoinRacks and StorageBin
+    public Tuple<int, int> unloadCoins() {
+        int centsInCoinRacks = 0;
+        foreach (var coinRack in this.hw.CoinRacks) {
+            centsInCoinRacks += coinRack.Unload().Sum(coin => coin.Value.Value);
+        }
+        var centsInStorageBin = this.hw.StorageBin.Unload().Sum(coin => coin.Value.Value);
+        return new Tuple<int, int>(centsInCoinRacks, centsInStorageBin);
     }
 
 }
@@ -468,6 +479,7 @@ public class CommunicationFacade {
  * ConfigureHW(List<ProductKind> products)  - (Technician Use) Configures the ProductRacks with product names and their costs
  * setNewName(int index, string name)       - (Technician Use) Can be used to set a new name for the already loaded product
  * setNewPrice(int index, Cents price)      - (Technician Use) Can be used to set a new price for the already loaded product
+ * unloadProducts()                         - (Technician Use) Unloads all the products in all the product racks and returns a list of products
  * 
  */
 public class ProductFacade {
@@ -569,6 +581,15 @@ public class ProductFacade {
     }
 
     // OUTBOUND
+
+    // Unload all the products from the Product racks
+    public List<Product> unloadProducts() {
+        var remainingProducts = new List<Product>();
+        foreach (var pr in this.hw.ProductRacks) {
+            remainingProducts.AddRange(pr.Unload());
+        }
+        return remainingProducts;
+    }
 
 }
 
