@@ -127,7 +127,9 @@ public class BusinessLogic {
  * and provide it with relevent information such as how much change can be credited and then giving this hardware the power to check
  * with it's banking system to see if the transaction has been successful and allow the machine to dispense the change.
  * 
- * insertCoin(Coin coin)		- Inserts a coin into the CoinSlot
+ * insertPayment(Coin coin)		- Inserts a physical coin into the CoinSlot and Funds Available
+ * insertPayment(Debit money)	- Inserts a virtual value from a Debit Card into the Funds Available
+ * insertPayment(Credit money)	- Inserts a virtual value from a Credit Card into the Funds Available
  * loadCoins(int[])			    - (Technician Use) Loads the quantity of coins corresponding to each coin rack
  * dispenseCoin(int index)		- Dispenses a coin from a given CoinRack[index]
  * dispenseChange()			    - Dispenses change for a sucessful transaction
@@ -212,9 +214,19 @@ public class PaymentFacade {
 
     // INBOUND
 
-    // Insert a coin into the machine
-    public void insertCoin(Coin coin) {
+    // Insert payment - Coin
+    public void insertPayment(Coin coin) {
         this.hw.CoinSlot.AddCoin(coin);
+    }
+
+    // Insert payment - Debit
+    public void insertPayment(Debit money) {
+        this.fundsAvailable += money.Value.Value;
+    }
+
+    // Insert payment - Credit
+    public void insertPayment(Credit money) {
+        this.fundsAvailable += money.Value.Value;
     }
 
     // Load the coin racks
@@ -606,3 +618,15 @@ public class SelectionEventArgs : EventArgs {
 public class ErrorEventArgs : EventArgs {
     public string message { get; set; }
 }
+
+// Payment Classes
+public class Debit : Coin {
+    public Debit(Cents value) : base (value) { }
+    public Debit(int value) : base(value) { }
+}
+
+public class Credit : Coin {
+    public Credit(Cents value) : base(value) { }
+    public Credit(int value) : base(value) { }
+}
+
