@@ -58,7 +58,7 @@ public class VendingMachine {
 
     // Configure VendingMachine
     public void Configure (List<ProductKind> products) {
-        // send to hardware logic to be loaded via product facade
+        // Send to hardware logic to be loaded via product facade
         this.hl.configurehw(products);
     }
 
@@ -76,28 +76,27 @@ public class BusinessLogic {
     // This class talks to the facades
     public BusinessLogic(HardwareFacade hardwareFacade) {
 
-        // Create Facades
+        // Create Facades and pass the hardware facade to them so that they can subscribe to appropriate events
         this.payment = new PaymentFacade(hardwareFacade);
         this.comms = new CommunicationFacade(hardwareFacade);
         this.prod = new ProductFacade(hardwareFacade);
 
-        // Load Facades into each other
-        this.payment.loadFacades(comms, prod);
-        this.comms.loadFacades(payment, prod);
-        this.prod.loadFacades(payment, comms);
-
         // Detect if a selection was made
         this.comms.SelectionMade += new EventHandler<SelectionEventArgs>(initiate);
+
+        // Detect errors from payment and product and pass it to the comms facade
+        this.payment.error += new EventHandler<ErrorEventArgs>(sendError);
+        this.prod.error += new EventHandler<ErrorEventArgs>(sendError);
 
     }
 
     // Configure the hardware
     public void configurehw (List<ProductKind> products) {
-        // send to the product facade
+        // Send to the product facade
         this.prod.ConfigureHW(products);
     }
 
-    // Launch 
+    // Execute a transaction 
     public void initiate(object sender, SelectionEventArgs e) {
 
         // If the machine is not being serviced or out of order
@@ -114,6 +113,11 @@ public class BusinessLogic {
 
         }        
 
+    }
+
+    // Throw errors to communication facade
+    public void sendError(object sender, ErrorEventArgs e) {
+        this.comms.setErrorMessage(e.message);
     }
 
 }
@@ -155,12 +159,10 @@ public class PaymentFacade {
     private int change = 0;
     private int productCost = 0;
     private int selectionButtonPressed;
-
-    // Facade variables
-    private CommunicationFacade comm;
-    private ProductFacade prod;
+    private string productName;
 
     // Local variables used to process logic
+    private Dictionary<SelectionButton, int> selectionButtonToIndex;
     private Dictionary<int, int> coinKindToCoinRackIndex;
 
     // SETUP
@@ -173,20 +175,18 @@ public class PaymentFacade {
         // Subscribe to Accepted coin events
         this.hw.CoinSlot.CoinAccepted += new EventHandler<CoinEventArgs>(updateCurrentBalance);
 
+        // Subscribe to all the selection buttons
+        this.selectionButtonToIndex = new Dictionary<SelectionButton, int>();
+        for (int i = 0; i < this.hw.SelectionButtons.Length; i++) {
+            this.hw.SelectionButtons[i].Pressed += new EventHandler(selectButtonPressed);
+            this.selectionButtonToIndex[this.hw.SelectionButtons[i]] = i;
+        }
+
         // Setup all the coins racks value to their index to be used in DispenseChange()
         this.coinKindToCoinRackIndex = new Dictionary<int, int>();
         for (int i = 0; i < this.hw.CoinRacks.Length; i++) {
             this.coinKindToCoinRackIndex[this.hw.GetCoinKindForCoinRack(i).Value] = i;
         }
-
-    }
-
-    // Load all the other facades and subscribe to their appropriate events
-    public void loadFacades(CommunicationFacade c, ProductFacade p) {
-        this.comm = c;
-        this.prod = p;
-
-        this.comm.SelectionMade += new EventHandler<SelectionEventArgs>(selectButtonPressed);
 
     }
 
@@ -198,14 +198,17 @@ public class PaymentFacade {
     }
 
     // This method retrieves info of the selection made
-    private void selectButtonPressed(object sender, SelectionEventArgs e) {
-        this.selectionButtonPressed = e.buttonPressIndex;
-        this.productCost = e.productCost.Value;
+    private void selectButtonPressed(object sender, EventArgs e) {
+        this.selectionButtonPressed = this.selectionButtonToIndex[(SelectionButton)sender];
+        this.productCost = this.hw.ProductKinds[this.selectionButtonPressed].Cost.Value;
+        this.productName = this.hw.ProductKinds[this.selectionButtonPressed].Name;
+
+        // Calculate the change
         this.change = this.fundsAvailable - this.productCost;
 
         // Check if the user can buy
         if (this.change < 0) {
-            this.error(this, new ErrorEventArgs { message = "You do not have enough funds available to purchase a " + e.product.Name });
+            this.error(this, new ErrorEventArgs { message = "You do not have enough funds available to purchase a " + this.productName });
         }
 
     }
@@ -248,7 +251,7 @@ public class PaymentFacade {
     // remains for the next transaction as a result of not having enough change to dispense
     private int dispenseAction() {
 
-        // This code is lifted from Tony's Assignment 4 in VendingMachineLogic.cs. Credit where credit is due.
+        // This code is lifted from Tony's Assignment 3 in VendingMachineLogic.cs. Credit where credit is due.
         while (this.change > 0) {
             var coinRacksWithMoney = this.coinKindToCoinRackIndex.Where(ck => ck.Key <= this.change && this.hw.CoinRacks[ck.Value].Count > 0).OrderByDescending(ck => ck.Key);
 
@@ -321,21 +324,21 @@ public class PaymentFacade {
  * that can use a variety of these interfacing parameters to display a custom message to the user. It's secondary purpose is to take select button
  * events from the vending machine base hardware and notify the other facades to update their local variables. 
  * 
- * selectButton(int index)		- Lets the user make a selection
- * getFundsInserted()           - Returns the total current value of funds in the machine
- * getSelectionButtonIndex()    - Returns the integer value of the selection button pressed
- * getProductNameSelected()     - Returns the string value of the name of the product selected
- * getCostOfTheProduct()        - Returns the int cost of the currently selected product
- * isOutOfOrder()               - Returns a "signal" of whether the machine is out of order or not
- * errorSignalLine()            - Returns a "signal" of whether an error was detected by any of the facades. Resets when a user enters a coin.
- * errorMessage()               - Returns the string of the corresponding error message.
+ * selectButton(int index)		    - Lets the user make a selection
+ * setErrorMessage(string message)  - Recieves an error message string from business logic or local facade to send to a display unit if needed
+ * getFundsInserted()               - Returns the total current value of funds in the machine
+ * getSelectionButtonIndex()        - Returns the integer value of the selection button pressed
+ * getProductNameSelected()         - Returns the string value of the name of the product selected
+ * getCostOfTheProduct()            - Returns the int cost of the currently selected product
+ * isOutOfOrder()                   - Returns a "signal" of whether the machine is out of order or not
+ * errorSignalLine()                - Returns a "signal" of whether an error was detected by any of the facades. Resets when a user enters a coin.
+ * errorMessage()                   - Returns the string of the corresponding error message.
  * 
  */
 public class CommunicationFacade {
 
     // Events to fire
     public event EventHandler<SelectionEventArgs> SelectionMade;
-    public event EventHandler<ErrorEventArgs> error;
 
     // Local copy of the hardware facade
     private HardwareFacade hw;
@@ -348,10 +351,6 @@ public class CommunicationFacade {
     private bool outOfOrderSignal;
     private bool errorSignal;
     private string errorMsg;
-
-    // Facade variables
-    private PaymentFacade paym;
-    private ProductFacade prod;
 
     // Local variables used to process logic
     private Dictionary<SelectionButton, int> selectionButtonToIndex;
@@ -379,17 +378,6 @@ public class CommunicationFacade {
 
     }
 
-    // Load all the other facades and subscribe to their appropriate events
-    public void loadFacades(PaymentFacade pa, ProductFacade p) {
-        this.paym = pa;
-        this.prod = p;
-
-        // Listen to their error messages from other facades
-        this.paym.error += new EventHandler<ErrorEventArgs>(setErrorMessage);
-        this.prod.error += new EventHandler<ErrorEventArgs>(setErrorMessage);
-
-    }
-
     // INTERNAL PROCESSING METHODS
 
     // If the coin is updated return the amount of money that has been inserted.
@@ -404,12 +392,14 @@ public class CommunicationFacade {
         this.selectionButtonPressed = this.selectionButtonToIndex[(SelectionButton)sender];
         this.productName = this.hw.ProductKinds[this.selectionButtonPressed].Name;
         this.productCost = this.hw.ProductKinds[this.selectionButtonPressed].Cost.Value;
-        // Notify other facades that a selection has been made
+        
+        // Notify business logic that a selection has been made
         this.SelectionMade(this, new SelectionEventArgs() {
             buttonPressIndex = this.selectionButtonPressed,
             productCost = this.hw.ProductKinds[this.selectionButtonPressed].Cost,
             product = this.hw.ProductKinds[this.selectionButtonPressed]
         });
+
     }
 
     // This method sets the machine status
@@ -418,13 +408,7 @@ public class CommunicationFacade {
     }
     private void setMachineNotActive(object sender, EventArgs e) {
         this.outOfOrderSignal = true;
-        this.error(this, new ErrorEventArgs { message = "This machine is out of order" });
-    }
-
-    // Set/Display errors
-    private void setErrorMessage(object sender, ErrorEventArgs e) {
-        this.errorSignal = true;
-        this.errorMsg = e.message;
+        this.setErrorMessage("This machine is out of order");
     }
 
     // INTERFACING METHODS
@@ -436,8 +420,14 @@ public class CommunicationFacade {
         if (index >= 0 && index < this.hw.SelectionButtons.Length) {
             this.hw.SelectionButtons[index].Press();
         } else {
-            this.error(this, new ErrorEventArgs { message = "That is an invalid selection" });
+            this.setErrorMessage("That is an invalid selection");
         }
+    }
+
+    // Set error message
+    public void setErrorMessage(string message) {
+        this.errorSignal = true;
+        this.errorMsg = message;
     }
 
 
@@ -507,10 +497,7 @@ public class ProductFacade {
     private int selectionButtonPressed;
 
     // Local variables used to process logic
-
-    // Facade variables
-    private PaymentFacade paym;
-    private CommunicationFacade comm;    
+    private Dictionary<SelectionButton, int> selectionButtonToIndex;
 
     // SETUP
 
@@ -519,22 +506,21 @@ public class ProductFacade {
 
         // SUBSCRIBE to events relevant to this Facade
 
-    }
+        // Subscribe to all the selection buttons
+        this.selectionButtonToIndex = new Dictionary<SelectionButton, int>();
+        for (int i = 0; i < this.hw.SelectionButtons.Length; i++) {
+            this.hw.SelectionButtons[i].Pressed += new EventHandler(selectButtonPressed);
+            this.selectionButtonToIndex[this.hw.SelectionButtons[i]] = i;
+        }
 
-    // Load all the other facades and subscribe to their appropriate events
-    public void loadFacades(PaymentFacade pa, CommunicationFacade c) {
-        this.paym = pa;
-        this.comm = c;
-
-        this.comm.SelectionMade += new EventHandler<SelectionEventArgs>(selectButtonPressed);
     }
 
     // INTERNAL PROCESSING METHODS
 
     // This method retrieves info of the selection made
-    private void selectButtonPressed(object sender, SelectionEventArgs e) {
-        this.product = e.product;
-        this.selectionButtonPressed = e.buttonPressIndex;
+    private void selectButtonPressed(object sender, EventArgs e) {
+        this.selectionButtonPressed = this.selectionButtonToIndex[(SelectionButton)sender];
+        this.product = this.hw.ProductKinds[this.selectionButtonPressed];
     }
 
     // INTERFACING METHODS
@@ -605,21 +591,8 @@ public class ProductFacade {
 
 }
 
-/********* EVENT DELEGATES **********/
 
-// Delegates for communication facade
-public class SelectionEventArgs : EventArgs {
-    public int buttonPressIndex { get; set; }
-    public Cents productCost { get; set; }
-    public ProductKind product { get; set; }
-}
-
-// Delegates for communication facade
-public class ErrorEventArgs : EventArgs {
-    public string message { get; set; }
-}
-
-// Payment Classes
+// Payment Classes to differentiate the type of payment
 public class Debit : Coin {
     public Debit(Cents value) : base (value) { }
     public Debit(int value) : base(value) { }
@@ -628,5 +601,19 @@ public class Debit : Coin {
 public class Credit : Coin {
     public Credit(Cents value) : base(value) { }
     public Credit(int value) : base(value) { }
+}
+
+/********* EVENT DELEGATES **********/
+
+// Delegates information of the product selection netween Business logic and communication facade
+public class SelectionEventArgs : EventArgs {
+    public int buttonPressIndex { get; set; }
+    public Cents productCost { get; set; }
+    public ProductKind product { get; set; }
+}
+
+// Delegates error data between Business logic and other facades
+public class ErrorEventArgs : EventArgs {
+    public string message { get; set; }
 }
 
